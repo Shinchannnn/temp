@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCAP Parser</title>
+    <style>
+        /* General Styling */
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to bottom right, #f0f4f8, #d9e2ec);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            width: 80%;
+            max-width: 1200px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        h1 {
+            text-align: center;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+
+        /* Center Boxes */
+        .box-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        /* Box Styling */
+        .box {
+            width: 45%;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .box h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        /* Search Box and Dropdown */
+        #searchBox {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .dropdown {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: white;
+        }
+
+        .dropdown div {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+
+        .dropdown div:hover {
+            background: #f1f1f1;
+        }
+
+        /* Upload Form */
+        #uploadForm {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #uploadForm input[type="file"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #uploadForm button {
+            padding: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #uploadForm button:hover {
+            background: #218838;
+        }
+
+        .error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        /* Analyze Button */
+        #analyzeButton {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            padding: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #analyzeButton:hover {
+            background: #0056b3;
+        }
+
+        /* Result Box */
+        .result-box {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+
+        .result-box h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        #resultContent {
+            font-family: monospace;
+            white-space: pre-wrap;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body onload="resetPage()">
+    <div class="container">
+        <h1>PCAP Parser</h1>
+
+        <!-- Centered Boxes -->
+        <div class="box-container">
+            <!-- First Box: Available Templates -->
+            <div class="box">
+                <h2>Available Templates</h2>
+                <input type="text" id="searchBox" placeholder="Search templates..." oninput="searchTemplates()">
+                <div id="templateList" class="dropdown"></div>
+            </div>
+
+            <!-- Second Box: Upload PCAP File -->
+            <div class="box">
+                <h2>Upload PCAP File</h2>
+                <form id="uploadForm">
+                    <input type="file" id="pcapFile" accept=".pcap" required>
+                    <button type="submit">Upload</button>
+                </form>
+                <p id="fileError" class="error-message"></p>
+            </div>
+        </div>
+
+        <!-- Analyze Button -->
+        <button id="analyzeButton" onclick="analyze()">Analyze</button>
+
+        <!-- Result Box -->
+        <div id="resultBox" class="result-box">
+            <h2>Analysis Result</h2>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTemplate = null;
+        let jsonFilename = null;
+
+        // Reset fields on page refresh
+        function resetPage() {
+            document.getElementById("searchBox").value = "";
+            document.getElementById("templateList").innerHTML = "";
+            document.getElementById("pcapFile").value = "";
+            document.getElementById("fileError").textContent = "";
+            document.getElementById("resultContent").textContent = "";
+            selectedTemplate = null;
+            jsonFilename = null;
+        }
+
+        // Fetch templates from backend
+        async function fetchTemplates() {
+            try {
+                const response = await fetch('/api/get_templates');
+                return await response.json();
+            } catch (error) {
+                console.error("Error fetching templates:", error);
+                return [];
+            }
+        }
+
+        // Search templates dynamically
+        async function searchTemplates() {
+            const searchQuery = document.getElementById('searchBox').value.toLowerCase();
+            const templateList = document.getElementById('templateList');
+            templateList.innerHTML = '';
+
+            const templates = await fetchTemplates();
+            const filteredTemplates = templates.filter(template =>
+                template.templateName.toLowerCase().includes(searchQuery)
+            );
+
+            filteredTemplates.forEach(template => {
+                const templateDiv = document.createElement('div');
+                templateDiv.textContent = template.templateName;
+                templateDiv.onclick = () => selectTemplate(template);
+                templateList.appendChild(templateDiv);
+            });
+        }
+
+        // Select a template
+        function selectTemplate(template) {
+            selectedTemplate = template;
+            document.getElementById('searchBox').value = template.templateName;
+        }
+
+        // Handle file upload
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('pcapFile');
+            if (fileInput.files.length === 0) return;
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const result = await response.json();
+                jsonFilename = result.json_filename;
+            } catch (error) {
+                console.error("Error uploading file:", error);
+            }
+        });
+
+        // Initialize page on load
+        window.onload = searchTemplates;
+    </script>
+</body>
+</html>
